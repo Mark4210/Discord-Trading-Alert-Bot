@@ -270,6 +270,65 @@ discordClient.on("messageCreate", async (message) => {
   }
 
 
+
+  // ── !testalert <symbol> ────────────────────────────────────────────────────
+  if (content.startsWith("!testalert")) {
+    const arg = message.content.trim().split(/\s+/)[1]?.toUpperCase();
+
+    const ALIAS = {
+      BTC:    { label: "Bitcoin",    symbol: "BTC-USD" },
+      ETH:    { label: "Ethereum",   symbol: "ETH-USD" },
+      SP500:  { label: "S&P 500",    symbol: "^GSPC"   },
+      SPX:    { label: "S&P 500",    symbol: "^GSPC"   },
+      NASDAQ: { label: "Nasdaq 100", symbol: "^IXIC"   },
+      NDX:    { label: "Nasdaq 100", symbol: "^IXIC"   },
+      DOW:    { label: "Dow Jones",  symbol: "^DJI"    },
+      DJI:    { label: "Dow Jones",  symbol: "^DJI"    },
+    };
+
+    // Default to SP500 if no symbol given
+    const match = arg ? (ALIAS[arg] || INSTRUMENTS.find(i => i.symbol.toUpperCase() === arg)) : ALIAS["SP500"];
+
+    if (arg && !match) {
+      const available = Object.keys(ALIAS).join(", ");
+      await message.reply(`⚠️ Unknown symbol \`${arg}\`. Available: ${available}`);
+      return;
+    }
+
+    const { label, symbol } = match;
+    const thinking = await message.reply(`⏳ Firing test alert for **${label}**...`);
+
+    try {
+      // Fetch real current price, then simulate a 5.5% drop from it
+      const quote        = await yahooFinance.quote(symbol, {}, { validateResult: false });
+      const currentPrice = quote.regularMarketPrice ?? 1000;
+      const openPrice    = currentPrice / (1 - 0.055); // back-calculate a fake open
+      const changePercent = -5.5; // simulated drop
+
+      await sendDiscordAlert({ label, symbol, currentPrice, openPrice, changePercent });
+
+      const embed = new EmbedBuilder()
+        .setTitle("✅ Test Alert Sent!")
+        .setColor(0xf0a500)
+        .setDescription(`A simulated **-5.5% drop alert** for **${label}** was just fired to the alerts channel.
+Check if it appeared correctly!`)
+        .addFields(
+          { name: "📛 Instrument",       value: `\`${label}\``,                  inline: true },
+          { name: "📉 Simulated Drop",   value: `\`-5.50%\``,                    inline: true },
+          { name: "💵 Real Price Used",  value: `\`${formatCurrency(currentPrice)}\``, inline: true },
+        )
+        .setFooter({ text: "This was a test — no real drop occurred" })
+        .setTimestamp();
+
+      await thinking.edit({ content: "", embeds: [embed] });
+
+    } catch (err) {
+      console.error("❌ [!testalert] " + err.message);
+      await thinking.edit("❌ Test alert failed: " + err.message);
+    }
+    return;
+  }
+
   // ── !chart <symbol> ───────────────────────────────────────────────────────
   if (content.startsWith("!chart")) {
     const arg = message.content.trim().split(/\s+/)[1]?.toUpperCase();
@@ -405,7 +464,8 @@ discordClient.on("messageCreate", async (message) => {
       .addFields(
         { name: "!status",        value: "Check if the bot is alive + uptime, market status, settings",      inline: false },
         { name: "!price",         value: "Fetch live prices for all monitored instruments",                  inline: false },
-        { name: "!chart <symbol>", value: "Show 30-day price chart. e.g. `!chart BTC`, `!chart SP500`",         inline: false },
+        { name: "!chart <symbol>",     value: "Show 30-day price chart. e.g. `!chart BTC`, `!chart SP500`",            inline: false },
+        { name: "!testalert [symbol]",  value: "Fire a fake drop alert to test the webhook. e.g. `!testalert BTC`",   inline: false },
         { name: "!help",          value: "Show this message",                                                    inline: false },
       )
       .setFooter({ text: "Yahoo Finance → Discord Alert Bot" });
