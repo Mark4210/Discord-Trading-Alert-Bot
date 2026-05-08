@@ -269,15 +269,144 @@ discordClient.on("messageCreate", async (message) => {
     return;
   }
 
+
+  // ── !chart <symbol> ───────────────────────────────────────────────────────
+  if (content.startsWith("!chart")) {
+    const arg = message.content.trim().split(/\s+/)[1]?.toUpperCase();
+
+    const ALIAS = {
+      BTC:    { label: "Bitcoin",    symbol: "BTC-USD" },
+      ETH:    { label: "Ethereum",   symbol: "ETH-USD" },
+      SP500:  { label: "S&P 500",    symbol: "^GSPC"   },
+      SPX:    { label: "S&P 500",    symbol: "^GSPC"   },
+      NASDAQ: { label: "Nasdaq 100", symbol: "^IXIC"   },
+      NDX:    { label: "Nasdaq 100", symbol: "^IXIC"   },
+      DOW:    { label: "Dow Jones",  symbol: "^DJI"    },
+      DJI:    { label: "Dow Jones",  symbol: "^DJI"    },
+    };
+
+    if (!arg) {
+      await message.reply("⚠️ Usage: `!chart <symbol>` — e.g. `!chart BTC`, `!chart ETH`, `!chart SP500`");
+      return;
+    }
+
+    const match = ALIAS[arg] || INSTRUMENTS.find(i => i.symbol.toUpperCase() === arg);
+    if (!match) {
+      const available = Object.keys(ALIAS).join(", ");
+      await message.reply(`⚠️ Unknown symbol \`${arg}\`. Available: ${available}`);
+      return;
+    }
+
+    const { label, symbol } = match;
+    const thinking = await message.reply(`⏳ Generating chart for **${label}**...`);
+
+    try {
+      const endDate   = new Date();
+      const startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+
+      const history = await yahooFinance.historical(symbol, {
+        period1: startDate.toISOString().split("T")[0],
+        period2: endDate.toISOString().split("T")[0],
+        interval: "1d",
+      });
+
+      if (!history || history.length === 0) {
+        await thinking.edit("❌ No historical data available for this symbol.");
+        return;
+      }
+
+      const labels  = history.map(d =>
+        new Date(d.date).toLocaleDateString("en-GB", { month: "short", day: "numeric" })
+      );
+      const prices  = history.map(d => d.close?.toFixed(2) ?? null).filter(Boolean);
+      const first   = parseFloat(prices[0]);
+      const last    = parseFloat(prices[prices.length - 1]);
+      const change  = ((last - first) / first) * 100;
+      const isUp    = change >= 0;
+      const lineColor = isUp ? "rgba(0,204,102,1)" : "rgba(255,45,45,1)";
+      const fillColor = isUp ? "rgba(0,204,102,0.15)" : "rgba(255,45,45,0.15)";
+
+      const chartConfig = {
+        type: "line",
+        data: {
+          labels,
+          datasets: [{
+            label: label,
+            data: prices,
+            borderColor: lineColor,
+            backgroundColor: fillColor,
+            borderWidth: 2,
+            pointRadius: 0,
+            fill: true,
+            tension: 0.3,
+          }],
+        },
+        options: {
+          plugins: {
+            legend: { display: false },
+            title: {
+              display: true,
+              text: label + " — Last 30 Days",
+              color: "#ffffff",
+              font: { size: 16 },
+            },
+          },
+          scales: {
+            x: { ticks: { color: "#aaaaaa", maxTicksLimit: 8 }, grid: { color: "#333333" } },
+            y: { ticks: { color: "#aaaaaa" }, grid: { color: "#333333" } },
+          },
+          layout: { padding: 10 },
+        },
+      };
+
+      const chartUrl = "https://quickchart.io/chart?" + new URLSearchParams({
+        c:               JSON.stringify(chartConfig),
+        width:           800,
+        height:          400,
+        backgroundColor: "#1a1a2e",
+      }).toString();
+
+      const imgRes = await fetch(chartUrl);
+      if (!imgRes.ok) throw new Error("QuickChart error: " + imgRes.status);
+      const imgBuffer = Buffer.from(await imgRes.arrayBuffer());
+
+      const { AttachmentBuilder } = await import("discord.js");
+      const attachment = new AttachmentBuilder(imgBuffer, { name: "chart.png" });
+
+      const changeLabel = isUp ? "📈 30d Change" : "📉 30d Change";
+      const embed = new EmbedBuilder()
+        .setTitle("📊 " + label + " — Last 30 Days")
+        .setColor(isUp ? 0x00cc66 : 0xff2d2d)
+        .setImage("attachment://chart.png")
+        .addFields(
+          { name: "💵 Current Price", value: "`" + formatCurrency(last) + "`",   inline: true },
+          { name: changeLabel,        value: "`" + formatPercent(change) + "`",  inline: true },
+          { name: "📅 Period",        value: "`Last 30 days`",                   inline: true },
+          { name: "🔗 Full Chart",    value: "[Open on TradingView ↗](" + tvChartUrl(symbol) + ")", inline: false },
+        )
+        .setFooter({ text: "Data via Yahoo Finance • Chart via QuickChart.io" })
+        .setTimestamp();
+
+      await thinking.edit({ content: "", embeds: [embed], files: [attachment] });
+
+    } catch (err) {
+      console.error("❌ [!chart] " + err.message);
+      await thinking.edit("❌ Failed to generate chart: " + err.message);
+    }
+    return;
+  }
+
   // ── !help ──────────────────────────────────────────────────────────────────
   if (content === "!help") {
     const embed = new EmbedBuilder()
       .setTitle("📖 Available Commands")
       .setColor(0x5865f2)
       .addFields(
-        { name: "!status", value: "Check if the bot is alive + uptime, market status, settings", inline: false },
-        { name: "!price",  value: "Fetch live prices for all monitored instruments",             inline: false },
-        { name: "!help",   value: "Show this message",                                           inline: false },
+        { name: "!status",        value: "Check if the bot is alive + uptime, market status, settings",      inline: false },
+        { name: "!price",         value: "Fetch live prices for all monitored instruments",                  inline: false },
+        { name: "!chart <symbol>", value: "Show 30-day price chart. e.g. `!chart BTC`, `!chart SP500`",         inline: false },
+        { name: "!help",          value: "Show this message",                                                    inline: false },
       )
       .setFooter({ text: "Yahoo Finance → Discord Alert Bot" });
 
