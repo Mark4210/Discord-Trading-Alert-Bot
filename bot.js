@@ -24,9 +24,11 @@ const BOT_START_TIME        = Date.now();
 
 // ─── Instruments ──────────────────────────────────────────────────────────────
 const INSTRUMENTS = [
-  { label: "S&P 500",    symbol: "^GSPC" },
-  { label: "Nasdaq 100", symbol: "^IXIC" },
-  { label: "Dow Jones",  symbol: "^DJI"  },
+  { label: "S&P 500",    symbol: "^GSPC"   },
+  { label: "Nasdaq 100", symbol: "^IXIC"   },
+  { label: "Dow Jones",  symbol: "^DJI"    },
+  { label: "Bitcoin",    symbol: "BTC-USD" },
+  { label: "Ethereum",   symbol: "ETH-USD" },
 ];
 
 const lastAlerted = {};
@@ -65,9 +67,11 @@ function formatUptime(ms) {
 
 function tvChartUrl(symbol) {
   const map = {
-    "^GSPC": "SP:SPX",
-    "^IXIC": "NASDAQ:COMP",
-    "^DJI":  "DJ:DJI",
+    "^GSPC":   "SP:SPX",
+    "^IXIC":   "NASDAQ:COMP",
+    "^DJI":    "DJ:DJI",
+    "BTC-USD": "BINANCE:BTCUSDT",
+    "ETH-USD": "BINANCE:ETHUSDT",
   };
   const tv = map[symbol] || symbol;
   return `https://www.tradingview.com/chart/?symbol=${encodeURIComponent(tv)}`;
