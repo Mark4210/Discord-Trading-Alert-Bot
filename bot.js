@@ -5,7 +5,7 @@ import dotenv from "dotenv";
 dotenv.config();
 
 // ─── Config ───────────────────────────────────────────────────────────────────
-const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1502272148037959801/aJn9vsIj5AMMRTPYlE3ET0wmftz6xC6bxbk6AHc23D-tyIsmWFS7tL364Dgf3hNvMhWS;
+const DISCORD_WEBHOOK_URL = process.env.DISCORD_WEBHOOK_URL;
 const DROP_THRESHOLD = parseFloat(process.env.DROP_THRESHOLD || "-5.0");
 const POLL_INTERVAL_MS = parseInt(process.env.POLL_INTERVAL_SECONDS || "60") * 1000;
 
