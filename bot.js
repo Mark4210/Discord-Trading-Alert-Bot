@@ -11,7 +11,8 @@ const dotenv = require("dotenv");
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 
 // ─── Yahoo Finance v3 ─────────────────────────────────────────────────────────
-const { default: yahooFinance } = await import("yahoo-finance2");
+const { YahooFinance } = await import("yahoo-finance2");
+const yahooFinance = new YahooFinance();
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const DISCORD_WEBHOOK_URL   = process.env.DISCORD_WEBHOOK_URL;
