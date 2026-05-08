@@ -94,16 +94,19 @@ async function fetchAllPrices() {
   const results = [];
   for (const { label, symbol } of INSTRUMENTS) {
     try {
-      const quote = await yahooFinance.quote(symbol);
-      results.push({
-        label,
-        symbol,
-        currentPrice:  quote.regularMarketPrice,
-        openPrice:     quote.regularMarketOpen,
-        changePercent: quote.regularMarketChangePercent,
-        ok: true,
-      });
+      const quote = await yahooFinance.quote(symbol, {}, { validateResult: false });
+
+      const currentPrice  = quote.regularMarketPrice  ?? quote.postMarketPrice ?? null;
+      const openPrice     = quote.regularMarketOpen    ?? null;
+      const changePercent = quote.regularMarketChangePercent ?? null;
+
+      if (currentPrice == null || openPrice == null || changePercent == null) {
+        throw new Error(`Missing fields in response: ${JSON.stringify(quote)}`);
+      }
+
+      results.push({ label, symbol, currentPrice, openPrice, changePercent, ok: true });
     } catch (err) {
+      console.error(`❌ [${label}] fetch error:`, err.message);
       results.push({ label, symbol, ok: false, error: err.message });
     }
   }
