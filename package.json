@@ -1,0 +1,19 @@
+{
+  "name": "yf-discord-alert-bot",
+  "version": "1.0.0",
+  "description": "Polls Yahoo Finance and sends Discord alerts on sudden market drops",
+  "main": "bot.js",
+  "type": "module",
+  "scripts": {
+    "start": "node bot.js",
+    "dev": "node --watch bot.js"
+  },
+  "dependencies": {
+    "dotenv": "^16.4.5",
+    "node-fetch": "^3.3.2",
+    "yahoo-finance2": "^2.11.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
