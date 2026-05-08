@@ -3,6 +3,7 @@ import { fileURLToPath } from "url";
 import path from "path";
 import fetch from "node-fetch";
 import { Client, GatewayIntentBits, EmbedBuilder } from "discord.js";
+import YahooFinance from "yahoo-finance2";
 
 // ─── Load .env (ESM-safe) ─────────────────────────────────────────────────────
 const require = createRequire(import.meta.url);
@@ -11,8 +12,7 @@ const dotenv = require("dotenv");
 dotenv.config({ path: path.resolve(__dirname, ".env") });
 
 // ─── Yahoo Finance v3 ─────────────────────────────────────────────────────────
-const { YahooFinance } = await import("yahoo-finance2");
-const yahooFinance = new YahooFinance();
+const yahooFinance = new YahooFinance({ suppressNotices: ["yahooSurvey"] });
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 const DISCORD_WEBHOOK_URL   = process.env.DISCORD_WEBHOOK_URL;
