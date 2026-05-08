@@ -1,4 +1,5 @@
 import { createRequire } from "module";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import path from "path";
 import fetch from "node-fetch";
@@ -22,14 +23,34 @@ const POLL_INTERVAL_MS      = parseInt(process.env.POLL_INTERVAL_SECONDS || "60"
 const ALERT_COOLDOWN_MS     = 60 * 60 * 1000; // 1 hour between repeat alerts
 const BOT_START_TIME        = Date.now();
 
-// ─── Instruments ──────────────────────────────────────────────────────────────
-const INSTRUMENTS = [
+// ─── Instruments (persistent) ─────────────────────────────────────────────────
+const INSTRUMENTS_FILE = path.resolve(__dirname, "instruments.json");
+
+const DEFAULT_INSTRUMENTS = [
   { label: "S&P 500",    symbol: "^GSPC"   },
   { label: "Nasdaq 100", symbol: "^IXIC"   },
   { label: "Dow Jones",  symbol: "^DJI"    },
   { label: "Bitcoin",    symbol: "BTC-USD" },
   { label: "Ethereum",   symbol: "ETH-USD" },
 ];
+
+function loadInstruments() {
+  try {
+    if (fs.existsSync(INSTRUMENTS_FILE)) {
+      const data = JSON.parse(fs.readFileSync(INSTRUMENTS_FILE, "utf8"));
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+  } catch (e) {
+    console.warn("⚠️  Could not read instruments.json, using defaults:", e.message);
+  }
+  return [...DEFAULT_INSTRUMENTS];
+}
+
+function saveInstruments(instruments) {
+  fs.writeFileSync(INSTRUMENTS_FILE, JSON.stringify(instruments, null, 2));
+}
+
+let INSTRUMENTS = loadInstruments();
 
 const lastAlerted = {};
 
@@ -271,6 +292,107 @@ discordClient.on("messageCreate", async (message) => {
 
 
 
+
+  // ── !add <symbol> [label] ──────────────────────────────────────────────────
+  if (content.startsWith("!add")) {
+    const parts = message.content.trim().split(/\s+/);
+    const symbol = parts[1]?.toUpperCase();
+    const label  = parts.slice(2).join(" ") || symbol;
+
+    if (!symbol) {
+      await message.reply("⚠️ Usage: `!add <symbol> [label]`\ne.g. `!add AAPL Apple` or `!add BTC-USD`");
+      return;
+    }
+
+    // Check if already tracked
+    if (INSTRUMENTS.find(i => i.symbol.toUpperCase() === symbol)) {
+      await message.reply(`⚠️ \`${symbol}\` is already being tracked.`);
+      return;
+    }
+
+    const thinking = await message.reply(`⏳ Validating \`${symbol}\` with Yahoo Finance...`);
+
+    try {
+      // Validate symbol actually exists
+      const quote = await yahooFinance.quote(symbol, {}, { validateResult: false });
+      if (!quote || !quote.regularMarketPrice) throw new Error("No price data returned");
+
+      const newInstrument = { label, symbol };
+      INSTRUMENTS.push(newInstrument);
+      saveInstruments(INSTRUMENTS);
+
+      const embed = new EmbedBuilder()
+        .setTitle("✅ Instrument Added")
+        .setColor(0x00cc66)
+        .addFields(
+          { name: "📛 Label",          value: `\`${label}\``,                                    inline: true },
+          { name: "🔤 Symbol",         value: `\`${symbol}\``,                                   inline: true },
+          { name: "💵 Current Price",  value: `\`${formatCurrency(quote.regularMarketPrice)}\``,  inline: true },
+          { name: "📊 Now Tracking",   value: INSTRUMENTS.map(i => `\`${i.label}\``).join(", "), inline: false },
+        )
+        .setFooter({ text: "Will be monitored on next poll cycle" })
+        .setTimestamp();
+
+      await thinking.edit({ content: "", embeds: [embed] });
+
+    } catch (err) {
+      await thinking.edit(`❌ Could not add \`${symbol}\` — Yahoo Finance returned no data. Double-check the symbol (e.g. \`AAPL\`, \`BTC-USD\`, \`^GSPC\`).`);
+    }
+    return;
+  }
+
+  // ── !remove <symbol> ───────────────────────────────────────────────────────
+  if (content.startsWith("!remove")) {
+    const symbol = message.content.trim().split(/\s+/)[1]?.toUpperCase();
+
+    if (!symbol) {
+      await message.reply("⚠️ Usage: `!remove <symbol>`\ne.g. `!remove AAPL` or `!remove BTC-USD`");
+      return;
+    }
+
+    const index = INSTRUMENTS.findIndex(i => i.symbol.toUpperCase() === symbol);
+    if (index === -1) {
+      const tracked = INSTRUMENTS.map(i => `\`${i.symbol}\``).join(", ");
+      await message.reply(`⚠️ \`${symbol}\` is not currently tracked.\nCurrently tracking: ${tracked}`);
+      return;
+    }
+
+    const removed = INSTRUMENTS.splice(index, 1)[0];
+    saveInstruments(INSTRUMENTS);
+
+    const embed = new EmbedBuilder()
+      .setTitle("🗑️ Instrument Removed")
+      .setColor(0xff2d2d)
+      .addFields(
+        { name: "📛 Removed",        value: `\`${removed.label}\` (\`${removed.symbol}\`)`,    inline: false },
+        { name: "📊 Now Tracking",   value: INSTRUMENTS.length > 0
+            ? INSTRUMENTS.map(i => `\`${i.label}\``).join(", ")
+            : "_(none)_",                                                                        inline: false },
+      )
+      .setFooter({ text: "Removed from monitoring immediately" })
+      .setTimestamp();
+
+    await message.reply({ embeds: [embed] });
+    return;
+  }
+
+  // ── !instruments ───────────────────────────────────────────────────────────
+  if (content === "!instruments") {
+    const rows = INSTRUMENTS.map((i, idx) =>
+      `\`${String(idx + 1).padStart(2, "0")}.\` **${i.label}** — \`${i.symbol}\``
+    ).join("\n");
+
+    const embed = new EmbedBuilder()
+      .setTitle(`📋 Tracked Instruments (${INSTRUMENTS.length})`)
+      .setColor(0x1a73e8)
+      .setDescription(rows || "_(none — use `!add <symbol>` to add one)_")
+      .setFooter({ text: "Use !add <symbol> or !remove <symbol> to manage" })
+      .setTimestamp();
+
+    await message.reply({ embeds: [embed] });
+    return;
+  }
+
   // ── !testalert <symbol> ────────────────────────────────────────────────────
   if (content.startsWith("!testalert")) {
     const arg = message.content.trim().split(/\s+/)[1]?.toUpperCase();
@@ -466,6 +588,9 @@ Check if it appeared correctly!`)
         { name: "!price",         value: "Fetch live prices for all monitored instruments",                  inline: false },
         { name: "!chart <symbol>",     value: "Show 30-day price chart. e.g. `!chart BTC`, `!chart SP500`",            inline: false },
         { name: "!testalert [symbol]",  value: "Fire a fake drop alert to test the webhook. e.g. `!testalert BTC`",   inline: false },
+        { name: "!add <symbol> [label]", value: "Start tracking a new instrument. e.g. `!add AAPL Apple`",             inline: false },
+        { name: "!remove <symbol>",      value: "Stop tracking an instrument. e.g. `!remove AAPL`",                      inline: false },
+        { name: "!instruments",          value: "List all currently tracked instruments",                                 inline: false },
         { name: "!help",          value: "Show this message",                                                    inline: false },
       )
       .setFooter({ text: "Yahoo Finance → Discord Alert Bot" });
