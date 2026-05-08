@@ -9,9 +9,10 @@
     "dev": "node --watch bot.js"
   },
   "dependencies": {
+    "discord.js": "^14.15.3",
     "dotenv": "^16.4.5",
     "node-fetch": "^3.3.2",
-    "yahoo-finance2": "^2.11.3"
+    "yahoo-finance2": "^3.0.0"
   },
   "engines": {
     "node": ">=18.0.0"
